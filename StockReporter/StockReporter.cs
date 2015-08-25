@@ -14,9 +14,12 @@ namespace StockReporter
     public class StockReporter
     {
         private const string YahooFinanceUrl = "https://query.yahooapis.com/v1/public/yql?q={0}&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback=";
-        private const string YqlQuery = "select symbol, PreviousClose from yahoo.finance.quotes where symbol in ({0})";
+        private const string YqlQuery = "select {0} from yahoo.finance.quotes where symbol in ({1})";
         private const string DefaultStockFile = "Stocks.json";
 
+        private List<Stock> quotes;
+        private List<StockLimits> stockLimits;
+        
         private static string DefaultStockPath
         {
             get
@@ -24,6 +27,78 @@ namespace StockReporter
                 string defaultDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
                 return Path.Combine(defaultDir, DefaultStockFile);
             }
+        }
+
+        private static string StockColumnsToPull
+        {
+            get
+            {
+                StringBuilder sb = new StringBuilder();
+                string message;
+
+                foreach(var stockName in typeof(Stock).GetProperties().Select(p => p.Name))
+                {
+                    sb.AppendFormat("{0},", stockName);
+                }
+
+                message = sb.ToString();
+                return message.Substring(0, message.Length - 1);
+            }
+        }
+
+        public StockReporter(List<Stock> quotes, List<StockLimits> stockLimits)
+        {
+            this.quotes = quotes;
+            this.stockLimits = stockLimits;
+        }
+
+        public static void PrintProperties(object o)
+        {
+            StringBuilder sb = new StringBuilder();
+            string propertyMessage;
+
+            foreach (var p in o.GetType().GetProperties())
+            {
+                sb.AppendFormat("{0}: {1}, ", p.Name, p.GetValue(o));
+            }
+
+            propertyMessage = sb.ToString();
+            Console.WriteLine(propertyMessage.Substring(0, propertyMessage.Length-2));
+        }
+
+        public void ReportStocksOutsideLimits()
+        {
+            Console.WriteLine("Stocks under Min");
+            PullStocksUnderMin().ForEach(s => PrintProperties(s));
+            Console.WriteLine();
+
+            Console.WriteLine("Stocks over Max");
+            PullStocksOverMax().ForEach(s => PrintProperties(s));
+            Console.WriteLine();
+        }
+
+        public void ReportRules()
+        {
+            Console.WriteLine("Stock Rules");
+            stockLimits.ForEach(sl => PrintProperties(sl));
+            Console.WriteLine();
+        }
+
+        private static void Main(string[] args)
+        {
+            List<StockLimits> stockLimits = GetStockLimits(args.FirstOrDefault() ?? string.Empty);
+            string[] symbols = stockLimits.Select(sl => sl.Symbol).ToArray();
+            string yahooUrl = YqlUrlFromSymbols(symbols);
+            List<Stock> quotes = PullStocksFromUrl(yahooUrl);
+            StockReporter sr = new StockReporter(quotes, stockLimits);
+
+            sr.ReportRules();
+            sr.ReportStocksOutsideLimits();
+
+            Console.WriteLine("Query used: ");
+            Console.WriteLine("\t" + YqlQueryFromSymbols(symbols));
+            Console.WriteLine("Please press any key to continue...");
+            Console.ReadLine();
         }
 
         private static List<StockLimits> GetStockLimits(string filePath = "")
@@ -41,14 +116,14 @@ namespace StockReporter
             StringBuilder sb = new StringBuilder();
             string symbols = null;
 
-            foreach(var s in symbolsToPull)
+            foreach (var s in symbolsToPull)
             {
-                sb.AppendFormat("\"{0}\", ",s);
+                sb.AppendFormat("\"{0}\", ", s);
             }
 
             symbols = sb.ToString();
 
-            return string.Format(YqlQuery, symbols.Substring(0, symbols.Length - 2));
+            return string.Format(YqlQuery, StockColumnsToPull, symbols.Substring(0, symbols.Length - 2));
         }
 
         private static string YqlUrlFromSymbols(IEnumerable<string> symbolsToPull)
@@ -77,41 +152,16 @@ namespace StockReporter
             return resultArray.ToObject<List<Stock>>();
         }
 
-        private static List<Stock> PullStocksUnderMin(IList<Stock> stockList, IList<StockLimits> stockLimitList)
+        private List<Stock> PullStocksUnderMin()
         {
-            Dictionary<string, double> minLookup = stockLimitList.ToDictionary(k => k.Symbol.ToLower(), v => v.Min);
-
-            return stockList.Where(s => s.PreviousClose < minLookup[s.Symbol]).ToList();
+            Dictionary<string, double> minLookup = stockLimits.ToDictionary(k => k.Symbol, v => v.Min);
+            return quotes.Where(s => s.PreviousClose < minLookup[s.Symbol]).ToList();
         }
 
-        private static List<Stock> PullStocksOverMax(IList<Stock> stockList, IList<StockLimits> stockLimitList)
+        private List<Stock> PullStocksOverMax()
         {
-            Dictionary<string, double> maxLookup = stockLimitList.ToDictionary(k => k.Symbol.ToLower(), v => v.Max);
-            return stockList.Where(s => maxLookup[s.Symbol] < s.PreviousClose).ToList();
-        }
-
-        private static void Main(string[] args)
-        {
-            var stockLimitList = GetStockLimits(args.FirstOrDefault() ?? string.Empty);
-            var yahooUrl = YqlUrlFromSymbols(stockLimitList.Select(s => s.Symbol));
-            List<Stock> quotes = PullStocksFromUrl("https://query.yahooapis.com/v1/public/yql?q=select%20symbol%2C%20PreviousClose%20from%20yahoo.finance.quotes%20where%20symbol%20in%20(%22vti%22%2C%20%22vxus%22)&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback=");
-            List<Stock> stocksUnderMin = PullStocksUnderMin(quotes, stockLimitList);
-            List<Stock> stocksOverMax = PullStocksOverMax(quotes, stockLimitList);
-
-            Console.WriteLine("Stock rules");
-            stockLimitList.ForEach(sl => Console.WriteLine(sl));
-            Console.WriteLine();
-
-            Console.WriteLine("Stocks under min");
-            stocksUnderMin.ForEach(s => Console.WriteLine(s));
-            Console.WriteLine();
-
-            Console.WriteLine("Stocks over max");
-            stocksOverMax.ForEach(s => Console.WriteLine(s));
-            Console.WriteLine();
-
-            Console.WriteLine("Please press any key to continue...");
-            Console.ReadLine();
+            Dictionary<string, double> maxLookup = stockLimits.ToDictionary(k => k.Symbol, v => v.Max);
+            return quotes.Where(s => maxLookup[s.Symbol] < s.PreviousClose).ToList();
         }
     }
 }

@@ -6,9 +6,6 @@
 
         public string Symbol { get; set; }
 
-        public override string ToString()
-        {
-            return string.Format("Symbol: {0}, PreviousClose: {1}", Symbol, PreviousClose);
-        }
+        public double Change { get; set; }
     }
 }

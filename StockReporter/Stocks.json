@@ -8,5 +8,15 @@
         "Symbol": "VXUS",
         "Min": 46.50,
         "Max": 50.1
+    },
+    {
+        "Symbol": "BNDX",
+        "Min": 20.85,
+        "Max": 42.52
+    },
+    {
+        "Symbol": "BND",
+        "Min": 46.50,
+        "Max": 90.5
     }
 ]
