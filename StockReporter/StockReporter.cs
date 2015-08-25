@@ -29,23 +29,6 @@ namespace StockReporter
             }
         }
 
-        private static string StockColumnsToPull
-        {
-            get
-            {
-                StringBuilder sb = new StringBuilder();
-                string message;
-
-                foreach(var stockName in typeof(Stock).GetProperties().Select(p => p.Name))
-                {
-                    sb.AppendFormat("{0},", stockName);
-                }
-
-                message = sb.ToString();
-                return message.Substring(0, message.Length - 1);
-            }
-        }
-
         public StockReporter(List<Stock> quotes, List<StockLimits> stockLimits)
         {
             this.quotes = quotes;
@@ -66,14 +49,31 @@ namespace StockReporter
             Console.WriteLine(propertyMessage.Substring(0, propertyMessage.Length-2));
         }
 
-        public void ReportStocksOutsideLimits()
+        public void ReportStocksUsingLimits()
         {
+            HashSet<string> reportedSymbols = new HashSet<string>();
+
             Console.WriteLine("Stocks under Min");
-            PullStocksUnderMin().ForEach(s => PrintProperties(s));
+            foreach(var stock in PullStocksUnderMin())
+            {
+                reportedSymbols.Add(stock.Symbol);
+                PrintProperties(stock);
+            }
             Console.WriteLine();
 
             Console.WriteLine("Stocks over Max");
-            PullStocksOverMax().ForEach(s => PrintProperties(s));
+            foreach (var stock in PullStocksOverMax())
+            {
+                reportedSymbols.Add(stock.Symbol);
+                PrintProperties(stock);
+            }
+            Console.WriteLine();
+
+            Console.WriteLine("Stocks within Range");
+            foreach(var q in quotes.Where(q => !reportedSymbols.Contains(q.Symbol)))
+            {
+                PrintProperties(q);
+            }
             Console.WriteLine();
         }
 
@@ -93,7 +93,7 @@ namespace StockReporter
             StockReporter sr = new StockReporter(quotes, stockLimits);
 
             sr.ReportRules();
-            sr.ReportStocksOutsideLimits();
+            sr.ReportStocksUsingLimits();
 
             Console.WriteLine("Query used: ");
             Console.WriteLine("\t" + YqlQueryFromSymbols(symbols));
@@ -123,7 +123,7 @@ namespace StockReporter
 
             symbols = sb.ToString();
 
-            return string.Format(YqlQuery, StockColumnsToPull, symbols.Substring(0, symbols.Length - 2));
+            return string.Format(YqlQuery, StockColumnsToPull(), symbols.Substring(0, symbols.Length - 2));
         }
 
         private static string YqlUrlFromSymbols(IEnumerable<string> symbolsToPull)
@@ -150,6 +150,20 @@ namespace StockReporter
             JObject o = JObject.Parse(json);
             JArray resultArray = (JArray)o.SelectToken("query.results.quote");
             return resultArray.ToObject<List<Stock>>();
+        }
+
+        private static string StockColumnsToPull()
+        {
+            StringBuilder sb = new StringBuilder();
+            string message;
+
+            foreach (var stockName in typeof(Stock).GetProperties().Select(p => p.Name))
+            {
+                sb.AppendFormat("{0},", stockName);
+            }
+
+            message = sb.ToString();
+            return message.Substring(0, message.Length - 1);
         }
 
         private List<Stock> PullStocksUnderMin()
