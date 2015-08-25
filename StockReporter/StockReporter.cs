@@ -79,14 +79,14 @@ namespace StockReporter
 
         public void ReportRules()
         {
-            Console.WriteLine("Stock Rules");
+            Console.WriteLine("Stock Limits");
             stockLimits.ForEach(sl => PrintProperties(sl));
             Console.WriteLine();
         }
 
         private static void Main(string[] args)
         {
-            List<StockLimits> stockLimits = GetStockLimits(args.FirstOrDefault() ?? string.Empty);
+            List<StockLimits> stockLimits = GetStockLimitsFromFile(args.FirstOrDefault() ?? string.Empty);
             string[] symbols = stockLimits.Select(sl => sl.Symbol).ToArray();
             string yahooUrl = YqlUrlFromSymbols(symbols);
             List<Stock> quotes = PullStocksFromUrl(yahooUrl);
@@ -101,7 +101,7 @@ namespace StockReporter
             Console.ReadLine();
         }
 
-        private static List<StockLimits> GetStockLimits(string filePath = "")
+        private static List<StockLimits> GetStockLimitsFromFile(string filePath = "")
         {
             if (filePath.Trim() == string.Empty)
             {
